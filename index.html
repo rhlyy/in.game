@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Neon Arena Fighter — AI Mode</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080b18;color:#fff;font-family:system-ui,Arial,sans-serif;text-align:center}
+h1{font-size:clamp(20px,4vw,32px);margin:12px 0 4px;color:#63f4ff;text-shadow:0 0 14px #00d9ff}
+.sub{margin:0 0 10px;color:#b9c6e8;font-size:13px}
+.toolbar{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;padding:8px}
+button,select{border:1px solid #48eaff;background:#111a35;color:#fff;border-radius:10px;padding:10px 13px;font-weight:700;font-size:14px}
+button:active{transform:scale(.97);background:#1c3760}button.selected{background:#0b6577}
+#wrap{width:min(100%,1000px);margin:auto;padding:0 8px}
+canvas{display:block;width:100%;height:auto;aspect-ratio:16/9;border:2px solid #263c71;border-radius:12px;background:#080d25;touch-action:none}
+.hint{font-size:12px;color:#c6d0eb;margin:8px}
+.mobile{display:flex;justify-content:space-between;gap:12px;margin:10px auto;max-width:850px}
+.pad{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.mobile button{min-width:54px;min-height:48px;font-size:18px;touch-action:none}
+.mobile .attack{border-color:#ff6398;background:#3a1434}
+.mobile .jump{border-color:#f6df65;background:#3b3215}
+@media(min-width:800px){.mobile{max-width:700px}}
+</style>
+</head>
+<body>
+<h1>⚡ NEON ARENA FIGHTER ⚡</h1>
+<p class="sub">2.5D arcade fighting • AI opponent • Mobile controls</p>
+<div class="toolbar">
+  <button id="aiBtn" class="selected">🤖 AI Mode</button>
+  <button id="twoBtn">👥 2 Player</button>
+  <label>Difficulty
+    <select id="difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select>
+  </label>
+  <button id="restart">↻ Restart</button>
+</div>
+<div id="wrap"><canvas id="game" width="960" height="540"></canvas></div>
+<div class="hint" id="hint">Move: A/D or ◀ ▶ • Jump: W • Punch: F • Kick: G</div>
+<div class="mobile">
+  <div class="pad">
+    <button data-action="left" aria-label="Move left">◀</button>
+    <button data-action="right" aria-label="Move right">▶</button>
+    <button data-action="jump" class="jump">⬆</button>
+  </div>
+  <div class="pad">
+    <button data-action="punch" class="attack">👊</button>
+    <button data-action="kick" class="attack">🦵</button>
+  </div>
+</div>
+<script>
+(() => {
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const aiBtn=document.getElementById('aiBtn'),twoBtn=document.getElementById('twoBtn');
+const difficulty=document.getElementById('difficulty'),hint=document.getElementById('hint');
+const W=canvas.width,H=canvas.height,floor=438;
+let mode='ai',over=false,winner='',frame=0,shake=0;
+const keys={};
+const p1={x:210,y:floor-104,w:52,h:104,vx:0,vy:0,hp:100,color:'#32e6ff',name:'PLAYER 1',face:1,ground:true,attack:0,attackType:'punch',cooldown:0,hitFlash:0};
+const p2={x:700,y:floor-104,w:52,h:104,vx:0,vy:0,hp:100,color:'#ff477e',name:'AI FIGHTER',face:-1,ground:true,attack:0,attackType:'punch',cooldown:0,hitFlash:0};
+function reset(){Object.assign(p1,{x:210,y:floor-104,vx:0,vy:0,hp:100,ground:true,attack:0,cooldown:0,hitFlash:0});Object.assign(p2,{x:700,y:floor-104,vx:0,vy:0,hp:100,ground:true,attack:0,cooldown:0,hitFlash:0});over=false;winner='';frame=0;shake=0;p2.name=mode==='ai'?'AI FIGHTER':'PLAYER 2';}
+function setMode(m){mode=m;aiBtn.classList.toggle('selected',m==='ai');twoBtn.classList.toggle('selected',m==='two');hint.textContent=m==='ai'?'Fight the computer! Move: A/D or ◀ ▶ • Jump: W • Punch: F • Kick: G':'P1: A/D, W, F, G • P2: ←/→, ↑, K, L';reset();}
+aiBtn.onclick=()=>setMode('ai');twoBtn.onclick=()=>setMode('two');document.getElementById('restart').onclick=reset;
+function jump(p){if(p.ground&&!over){p.vy=-13.8;p.ground=false;}}
+function attack(p,type){if(over||p.cooldown>0)return;p.attack=type==='kick'?19:14;p.attackType=type;p.cooldown=type==='kick'?32:23;}
+function movePlayer(p,left,right,jumpKey,punchKey,kickKey){p.vx=0;if(keys[left])p.vx=-4.4;if(keys[right])p.vx=4.4;if(keys[jumpKey])jump(p);if(keys[punchKey]){attack(p,'punch');keys[punchKey]=false;}if(keys[kickKey]){attack(p,'kick');keys[kickKey]=false;}}
+function aiUpdate(){if(over)return;const dx=(p1.x+p1.w/2)-(p2.x+p2.w/2),dist=Math.abs(dx),d=difficulty.value;
+const speed=d==='easy'?2.0:d==='medium'?3.0:3.8,range=d==='easy'?100: d==='medium'?118:135;
+p2.vx=0;
+if(dist>range-18)p2.vx=dx>0?-speed:speed;
+if(p2.ground&&dist<220&&Math.random()<(d==='hard'?.018:d==='medium'?.009:.004))jump(p2);
+if(dist<range&&p2.cooldown<=0){if(d==='easy'){if(Math.random()<.035)attack(p2,Math.random()<.65?'punch':'kick');}
+else if(d==='medium'){if(Math.random()<.075)attack(p2,Math.random()<.55?'punch':'kick');}
+else {if(Math.random()<.13)attack(p2,Math.random()<.45?'punch':'kick');}}
+}
+function updateFighter(p,other){
+p.x+=p.vx;p.vy+=.65;p.y+=p.vy;
+if(p.y+p.h>=floor){p.y=floor-p.h;p.vy=0;p.ground=true;}else p.ground=false;
+p.x=Math.max(35,Math.min(W-p.w-35,p.x));
+p.face=(other.x>p.x)?1:-1;
+if(p.cooldown>0)p.cooldown--;if(p.attack>0)p.attack--;if(p.hitFlash>0)p.hitFlash--;
+if(p.attack=== (p.attackType==='kick'?12:9)){
+const dist=Math.abs((p.x+p.w/2)-(other.x+other.w/2));
+const vertical=Math.abs((p.y+p.h/2)-(other.y+other.h/2));
+const reach=p.attackType==='kick'?112:88;
+if(dist<reach&&vertical<95&&other.hitFlash===0){
+const damage=p.attackType==='kick'? (mode==='ai'&&p===p2? (difficulty.value==='hard'?11:8):11) : 7;
+other.hp=Math.max(0,other.hp-damage);other.hitFlash=10;other.x+=p.face*18;shake=5;
+}}
+}
+function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
+function drawBackground(){
+const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,'#111a42');grad.addColorStop(1,'#080b18');ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+ctx.fillStyle='rgba(28,66,125,.28)';for(let i=0;i<13;i++){let bw=45+(i*17)%55,bh=90+(i*31)%180;ctx.fillRect(i*82,floor-bh,bw,bh);}
+ctx.strokeStyle='rgba(60,226,255,.15)';ctx.lineWidth=1;
+for(let x=-100;x<W+100;x+=55){ctx.beginPath();ctx.moveTo(W/2+(x-W/2)*.2,floor);ctx.lineTo(x,H);ctx.stroke();}
+for(let y=floor+12;y<H;y+=20){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+ctx.fillStyle='#17284a';ctx.fillRect(0,floor,W,H-floor);ctx.fillStyle='#32e6ff';ctx.fillRect(0,floor,W,3);
+}
+function drawFighter(p){
+ctx.save();ctx.translate(p.x+p.w/2,p.y);ctx.scale(p.face,1);
+ctx.shadowBlur=18;ctx.shadowColor=p.color;ctx.fillStyle=p.hitFlash?'#fff':p.color;
+const crouch=p.attackType==='kick'&&p.attack>0?8:0;
+roundedRect(-19,25+crouch,38,48,10);
+roundedRect(-17,0,34,30,10);
+ctx.fillStyle='#091126';roundedRect(1,8,10,6,3);
+ctx.fillStyle=p.color;roundedRect(-17,69+crouch,13,31-crouch,5);roundedRect(4,69+crouch,13,31-crouch,5);
+ctx.fillStyle=p.color;
+if(p.attack>0){
+ctx.save();ctx.rotate(p.attackType==='kick'?.22:-.15);
+if(p.attackType==='kick'){roundedRect(9,42,53,13,6);ctx.fillRect(48,39,18,19);}
+else {roundedRect(12,32,42,15,7);ctx.beginPath();ctx.arc(55,39,10,0,Math.PI*2);ctx.fill();}
+ctx.restore();
+}else{roundedRect(9,31,15,34,6);roundedRect(-23,31,15,34,6);}
+ctx.restore();
+}
+function bar(x,y,w,h,hp,color,label,flip=false){
+ctx.fillStyle='#202947';roundedRect(x,y,w,h,7);
+ctx.fillStyle=color;const fill=w*Math.max(0,hp)/100;if(flip)ctx.fillRect(x+w-fill,y,fill,h);else roundedRect(x,y,fill,h,7);
+ctx.strokeStyle='#ffffff70';ctx.lineWidth=1;ctx.strokeRect(x,y,w,h);
+ctx.fillStyle='#fff';ctx.font='bold 16px system-ui';ctx.textAlign=flip?'right':'left';ctx.fillText(label,flip?x+w:x,y-9);
+}
+function draw(){
+ctx.save();if(shake>0){ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);shake*=.75;if(shake<.5)shake=0;}
+drawBackground();drawFighter(p1);drawFighter(p2);
+bar(45,43,330,18,p1.hp,p1.color,'PLAYER 1');bar(W-375,43,330,18,p2.hp,p2.color,p2.name,true);
+ctx.textAlign='center';ctx.font='bold 18px system-ui';ctx.fillStyle='#d5e6ff';ctx.fillText('ROUND 1',W/2,54);
+if(over){ctx.fillStyle='rgba(3,6,18,.78)';ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.shadowBlur=22;ctx.shadowColor='#32e6ff';ctx.fillStyle='#fff';ctx.font='bold 48px system-ui';ctx.fillText(winner+' WINS!',W/2,H/2-10);ctx.shadowBlur=0;ctx.font='20px system-ui';ctx.fillStyle='#b9c6e8';ctx.fillText('Tap RESTART to fight again',W/2,H/2+34);}
+ctx.restore();
+}
+function loop(){
+frame++;
+if(!over){
+if(mode==='ai'){
+movePlayer(p1,'a','d','w','f','g');
+aiUpdate();
+}else{
+movePlayer(p1,'a','d','w','f','g');movePlayer(p2,'ArrowLeft','ArrowRight','ArrowUp','k','l');
+}
+updateFighter(p1,p2);updateFighter(p2,p1);
+if(p1.hp<=0||p2.hp<=0){over=true;winner=p1.hp<=0?(mode==='ai'?'AI FIGHTER':'PLAYER 2'):'PLAYER 1';}
+}
+draw();requestAnimationFrame(loop);
+}
+window.addEventListener('keydown',e=>{const k=e.key.length===1?e.key.toLowerCase():e.key;if(['ArrowLeft','ArrowRight','ArrowUp',' '].includes(k))e.preventDefault();keys[k]=true;});
+window.addEventListener('keyup',e=>{const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=false;});
+document.querySelectorAll('[data-action]').forEach(btn=>{
+const act=btn.dataset.action;
+const down=e=>{e.preventDefault();if(act==='jump')jump(p1);else if(act==='punch')attack(p1,'punch');else if(act==='kick')attack(p1,'kick');else keys[act==='left'?'a':'d']=true;};
+const up=e=>{e.preventDefault();if(act==='left')keys.a=false;if(act==='right')keys.d=false;};
+btn.addEventListener('pointerdown',down);btn.addEventListener('pointerup',up);btn.addEventListener('pointercancel',up);btn.addEventListener('pointerleave',up);
+});
+reset();loop();
+})();
+</script>
+</body>
+</html>
